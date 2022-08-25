@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Standard python libs
 import os
-from typing import Any, Generator, Iterator, List, Mapping, Sequence
+from typing import Any, Iterator, List, Mapping
 
 # Common PyPI libs
 import tomli

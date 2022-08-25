@@ -9,15 +9,16 @@ from typing import Mapping, Optional, Sequence
 import requests
 
 # Main Google client library
-from googleapiclient.discovery import Resource, build as google_service_build
+from googleapiclient.discovery import build as google_service_build
 from googleapiclient.http import MediaIoBaseDownload
 
 # For OAuth2
 SCOPES: Optional[Sequence[str]] = None
 try:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    # No stubs for these in google-api-python-client-stubs
+    from google.auth.transport.requests import Request  # type: ignore
+    from google.oauth2.credentials import Credentials  # type: ignore
+    from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
 
     SCOPES = [
         "https://www.googleapis.com/auth/drive.readonly",
@@ -26,6 +27,7 @@ try:
 except ImportError:
     pass
 
+# Local libs
 from .state import read_json, state_path
 
 
@@ -56,7 +58,7 @@ class GoogleDrive:
         self.fileId = fileId
 
     @classmethod
-    def _get_drive(cls) -> Resource:
+    def _get_drive(cls):  # by inference, -> DriveResource:
         SERVICE = "drive"
         VERSION = "v3"
 
@@ -93,6 +95,8 @@ class GoogleDrive:
                     cls._drive = google_service_build(
                         SERVICE, VERSION, credentials=creds
                     )
+
+        assert cls._drive is not None
         return cls._drive
 
     def stat(self) -> Mapping[str, str]:

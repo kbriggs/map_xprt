@@ -25,6 +25,7 @@ ConfigDict = Mapping[str, Any]
 
 class MapConfig:
     def __init__(self, docid: str, s3_bucket: str, s3_folder: str):
+        # TODO specify per-map s3 region?
         self.docid = docid
         self.bucket = s3_bucket
         self.folder = s3_folder
@@ -34,9 +35,10 @@ class MapConfig:
 
 
 class Config:
-    def __init__(self, s3_bucket: str, s3_folder: str = None):
+    def __init__(self, s3_bucket: str, s3_folder: str = None, s3_region: str = None):
         self.bucket = s3_bucket
         self.folder = s3_folder
+        self.region = s3_region
         self.maps: List[MapConfig] = []
 
     @classmethod
@@ -46,6 +48,8 @@ class Config:
         }
         if "folder" in c["s3"]:
             args["s3_folder"] = c["s3"]["folder"]
+        if "region" in c["s3"]:
+            args["s3_region"] = c["s3"]["region"]
         cfg = cls(**args)
         for m in cls._find_maps(c["map"]):
             cfg._add_map(m)

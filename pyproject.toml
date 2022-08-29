@@ -4,6 +4,10 @@ version = "0.1.0"
 description = ""
 authors = ["Kieron Briggs <kbriggs@gmail.com>"]
 
+# Post-PEP-621: [project.scripts]
+[tool.poetry.scripts]
+map_xprt = "map_xprt.main:main"
+
 [tool.poetry.dependencies]
 python = "^3.8"
 google-api-python-client = "^2.58.0"

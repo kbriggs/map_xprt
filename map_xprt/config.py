@@ -40,7 +40,7 @@ class Config:
         self.bucket = s3_bucket
         self.folder = s3_folder
         self.region = s3_region
-        self.maps: List[MapConfig] = []
+        self.maps: List[MapConfig] = []  # TODO map name->config?
 
     @classmethod
     def from_config(cls, c: ConfigDict) -> Config:
@@ -94,6 +94,12 @@ class Config:
         for m in self.maps:
             r += f"\n\t{m}"
         return r
+
+    def map(self, name: str) -> MapConfig:
+        for m in self.maps:
+            print(f"{m.name}=={name}?")
+            if m.name == name:
+                return m
 
 
 def load_config(path=default_file()):

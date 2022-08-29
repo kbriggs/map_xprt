@@ -75,9 +75,9 @@ class Bucket:
         assert self._bucket.creation_date is not None
         return self._bucket
 
-    # FIXME testing only
-    def list_files(self, folder=""):
+    def find_matching(self, folder="", stem=""):
         bucket = self._get_bucket()
-        for o in bucket.objects.filter(Prefix=folder):
+        prefix = f"{folder}/{stem}".lstrip("/")
+        for o in bucket.objects.filter(Prefix=prefix):
             if not o.key.endswith("/"):
-                print(o.key)
+                yield o

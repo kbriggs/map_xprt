@@ -24,14 +24,15 @@ ConfigDict = Mapping[str, Any]
 
 
 class MapConfig:
-    def __init__(self, docid: str, s3_bucket: str, s3_folder: str):
+    def __init__(self, name: str, docid: str, s3_bucket: str, s3_folder: str):
         # TODO specify per-map s3 region?
+        self.name = name
         self.docid = docid
         self.bucket = s3_bucket
         self.folder = s3_folder
 
     def __str__(self):
-        return f"{self.docid} -> {self.bucket}/{self.folder}"
+        return f"{self.name}: {self.docid} -> {self.bucket}/{self.folder}"
 
 
 class Config:
@@ -56,13 +57,14 @@ class Config:
         return cfg
 
     @classmethod
-    def _find_maps(cls, c: ConfigDict) -> Iterator[ConfigDict]:
+    def _find_maps(cls, c: ConfigDict, parent: str = None) -> Iterator[ConfigDict]:
         # TODO: add the key path as an attribute?
         for n in c:
+            name = n if parent is None else ".".join((parent, n))
             if "docid" in c[n]:
-                yield c[n]
+                yield dict(c[n], name=name)
             else:
-                for m in cls._find_maps(c[n]):
+                for m in cls._find_maps(c[n], name):
                     yield m
 
     def _join_folder(self, folder: str) -> str:
@@ -75,6 +77,7 @@ class Config:
 
     def _add_map(self, m: ConfigDict) -> None:
         args = {
+            "name": m["name"],
             "docid": m["docid"],
             "s3_bucket": self.bucket,
             "s3_folder": self.folder,

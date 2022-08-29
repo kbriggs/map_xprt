@@ -2,7 +2,7 @@ from __future__ import annotations
 from math import ceil
 
 import tempfile
-from typing import BinaryIO, Optional
+from typing import IO, Optional
 from xml.etree import ElementTree
 
 import cairosvg  # type: ignore # has no stubs
@@ -96,7 +96,7 @@ class SVGRenderer:
             self.target_maxdim = target_maxdim
         self.crop = crop
 
-    def render(self, svg: BinaryIO, dest: Optional[BinaryIO] = None) -> BinaryIO:
+    def render(self, svg: IO[bytes], dest: Optional[IO[bytes]] = None) -> IO[bytes]:
         # TODO use a custom cairosvg.Surface subclass to, e.g.:
         # - override .finish() to do the crop and rescale directly on the cairo surface,
         #   instead of having to round-trip the converted raster and then do that
@@ -106,9 +106,11 @@ class SVGRenderer:
         if dest is None:
             # must be Named for pillow to detect type
             dest = tempfile.NamedTemporaryFile(suffix=".png")
+        assert dest is not None
 
         with tempfile.TemporaryFile() as f:
             # read first element to find original viewport
+            svg.seek(0)
             for _, e in ElementTree.iterparse(svg, ["start"]):
                 # .rpartition is to ignore the xmlns
                 if ElementTree.iselement(e) and e.tag.rpartition("}")[2] == "svg":

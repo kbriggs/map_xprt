@@ -96,16 +96,16 @@ class SVGRenderer:
             self.target_maxdim = target_maxdim
         self.crop = crop
 
-    def render(self, svg: BinaryIO):
+    def render(self, svg: BinaryIO, dest: Optional[BinaryIO] = None) -> BinaryIO:
         # TODO use a custom cairosvg.Surface subclass to, e.g.:
         # - override .finish() to do the crop and rescale directly on the cairo surface,
         #   instead of having to round-trip the converted raster and then do that
         # - override .convert() to avoid having to parse the XML twice in order to
         #   calculate the scale and crop factors
 
-        # must be Named for pillow to detect type
-        # FIXME remove delete=False
-        dest = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        if dest is None:
+            # must be Named for pillow to detect type
+            dest = tempfile.NamedTemporaryFile(suffix=".png")
 
         with tempfile.TemporaryFile() as f:
             # read first element to find original viewport

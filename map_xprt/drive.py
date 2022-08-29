@@ -3,7 +3,7 @@ from enum import Enum
 import errno
 import os
 import tempfile
-from typing import Mapping, Optional, Sequence
+from typing import BinaryIO, Mapping, Optional, Sequence
 
 # Common PyPI libs
 import requests
@@ -107,17 +107,15 @@ class GoogleDrive:
             .execute()
         )
 
-    def export(
-        self, mediaType: MediaType
-    ) -> str:  # return readable autodeleting tempfile?
+    def export(self, mediaType: MediaType, file: Optional[BinaryIO] = None) -> BinaryIO:
         drive = self._get_drive()
         request = drive.files().export_media(
             fileId=self.fileId, mimeType=mediaType.mimeType
         )
-        with tempfile.NamedTemporaryFile(suffix=mediaType.extension, delete=False) as f:
-            done = False
-            download = MediaIoBaseDownload(f, request)
-            while done is False:
-                status, done = download.next_chunk()
-                print(status)
-            return f.name
+        if file is None:
+            file = tempfile.NamedTemporaryFile(suffix=mediaType.extension)
+        done = False
+        download = MediaIoBaseDownload(file, request)
+        while done is False:
+            _, done = download.next_chunk()
+        return file

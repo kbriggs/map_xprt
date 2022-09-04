@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from configparser import ConfigParser
-from typing import Mapping, Optional
+from typing import TYPE_CHECKING, IO, Iterator, Mapping, Optional
+from urllib.parse import urlparse, urlunparse
 
 from boto3 import resource as aws_resource
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.service_resource import ObjectSummary
 
 from .state import read_json, state_path
 
@@ -56,13 +60,13 @@ class Bucket:
 
     def _get_resource(self):
         if self._resource is None:
-            args = {"service_name": "s3"}
+            args = {}
             if self.region is not None:
                 args["region_name"] = self.region
             if self.creds is not None:
                 args["aws_access_key_id"] = self.creds.access_key
                 args["aws_secret_access_key"] = self.creds.secret_key
-            self._resource = aws_resource(**args)
+            self._resource = aws_resource(service_name="s3", **args)
 
         assert self._resource is not None
         return self._resource
@@ -75,9 +79,24 @@ class Bucket:
         assert self._bucket.creation_date is not None
         return self._bucket
 
-    def find_matching(self, folder="", stem=""):
+    def _generate_url(self, key: str) -> str:
+        bucket = self._get_bucket()
+        url = self._get_resource().meta.client.generate_presigned_url(
+            "get_object", ExpiresIn=0, Params={"Bucket": bucket.name, "Key": key}
+        )
+        return urlunparse(urlparse(url)._replace(params="", query="", fragment=""))
+
+    def find_matching(
+        self, folder: str = "", stem: str = ""
+    ) -> Iterator[ObjectSummary]:
         bucket = self._get_bucket()
         prefix = f"{folder}/{stem}".lstrip("/")
         for o in bucket.objects.filter(Prefix=prefix):
             if not o.key.endswith("/"):
                 yield o
+
+    def upload(self, file: IO[bytes], filename: str, folder: str = "") -> str:
+        bucket = self._get_bucket()
+        key = f"{folder}/{filename}".lstrip("/")
+        bucket.upload_fileobj(file, key, ExtraArgs={"ContentType": "image/png"})
+        return self._generate_url(key)

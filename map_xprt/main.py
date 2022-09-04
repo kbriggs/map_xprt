@@ -3,7 +3,7 @@
 import argparse
 from datetime import datetime
 import re
-from typing import Optional, Type
+from typing import Optional
 
 from .config import Config, MapConfig, load_config
 from .drive import GoogleDrive, MediaType
@@ -151,7 +151,7 @@ def process_map(cfg: Config, map: MapConfig):
         filename = opts.output
     assert filename is not None
 
-    print(
+    verbose(
         f"{'Converting' if opts.only_convert else 'Converting and uploading'} {filename}"
     )
     if opts.dry_run is True:
@@ -171,7 +171,8 @@ def process_map(cfg: Config, map: MapConfig):
         )
         with r.render(svg, open(filename, "wb") if opts.only_convert else None) as png:
             if not opts.only_convert:
-                pass  # bucket.upload(png, filename, map.folder)
+                png.seek(0)
+                print(bucket.upload(png, filename, map.folder))
 
 
 def main():

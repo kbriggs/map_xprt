@@ -44,9 +44,7 @@ class Config:
 
     @classmethod
     def from_config(cls, c: ConfigDict) -> Config:
-        args = {
-            "s3_bucket": c["s3"]["bucket"],
-        }
+        args = {"s3_bucket": c["s3"]["bucket"]}
         if "folder" in c["s3"]:
             args["s3_folder"] = c["s3"]["folder"]
         if "region" in c["s3"]:
@@ -100,6 +98,7 @@ class Config:
             print(f"{m.name}=={name}?")
             if m.name == name:
                 return m
+        raise (ValueError(name))
 
 
 def load_config(path=default_file()):

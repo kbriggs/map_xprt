@@ -166,9 +166,13 @@ def process_map(cfg: Config, map: MapConfig):
                 szopts["target_height"] = opts.size[1]
         elif opts.maxsize is not None:
             szopts["target_maxdim"] = opts.maxsize
-        r = SVGRenderer(
-            crop=Box(*opts.crop) if opts.crop is not None else None, **szopts
-        )
+
+        crop = None
+        if map.crop is not None:
+            crop = map.crop
+        elif opts.crop is not None:
+            crop = opts.crop
+        r = SVGRenderer(crop=Box(*crop) if crop is not None else None, **szopts)
         with r.render(svg, open(filename, "wb") if opts.only_convert else None) as png:
             if not opts.only_convert:
                 png.seek(0)

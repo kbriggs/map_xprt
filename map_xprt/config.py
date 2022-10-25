@@ -24,12 +24,21 @@ ConfigDict = Mapping[str, Any]
 
 
 class MapConfig:
-    def __init__(self, name: str, docid: str, s3_bucket: str, s3_folder: str):
+    def __init__(
+        self,
+        name: str,
+        docid: str,
+        s3_bucket: str,
+        s3_folder: str,
+        crop: List[float] = None,
+    ):
         # TODO specify per-map s3 region?
         self.name = name
         self.docid = docid
         self.bucket = s3_bucket
         self.folder = s3_folder
+        assert crop is None or len(crop) == 4
+        self.crop = crop
 
     def __str__(self):
         return f"{self.name}: {self.docid} -> {self.bucket}/{self.folder}"
@@ -85,6 +94,8 @@ class Config:
                 args["s3_bucket"] = m["s3"]["bucket"]
             if "folder" in m["s3"]:
                 args["s3_folder"] = self._join_folder(m["s3"]["folder"])
+        if "crop" in m:
+            args["crop"] = m["crop"]
         self.maps.append(MapConfig(**args))
 
     def __str__(self):
@@ -95,7 +106,6 @@ class Config:
 
     def map(self, name: str) -> MapConfig:
         for m in self.maps:
-            print(f"{m.name}=={name}?")
             if m.name == name:
                 return m
         raise (ValueError(name))

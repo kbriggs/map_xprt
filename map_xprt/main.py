@@ -9,6 +9,7 @@ from .config import Config, MapConfig, load_config
 from .drive import GoogleDrive, MediaType
 from .render import Box, SVGRenderer
 from .s3 import Bucket
+from .types import Uploader
 
 
 cli = argparse.ArgumentParser(description="Export a Google Drawing to an S3-hosted PNG")
@@ -91,36 +92,6 @@ def name_to_stem(name: str) -> str:
     return re.sub(r"[^\w]", "", re.sub(r"[-\s]+", "_", name.lower()))
 
 
-fn_re = re.compile(r"_([0-9]+)\.[a-z]+$")
-
-
-def num_from_filename(filename: str) -> int:
-    m = fn_re.search(filename)
-    return int(m.group(1)) if m else -1
-
-
-def find_next(
-    bucket: Bucket,
-    stem: str,
-    folder: str = "",
-    before: datetime = None,
-    suffix: str = ".png",
-) -> Optional[str]:
-    try:
-        o = max(
-            bucket.find_matching(folder, stem), key=lambda o: num_from_filename(o.key)
-        )
-    except ValueError as e:
-        if "empty sequence" in str(e):
-            return f"{stem}_{1:03}{suffix}"
-        raise
-    verbose(f"{o} @ {o.last_modified}")
-    if before is not None and o.last_modified >= before:
-        return None
-
-    return f"{stem}_{num_from_filename(o.key)+1:03}{suffix}"
-
-
 # S3 buckets
 s3 = {}
 
@@ -142,7 +113,7 @@ def process_map(cfg: Config, map: MapConfig):
         if map.bucket not in s3:
             s3[map.bucket] = Bucket(map.bucket, cfg.region)
         bucket = s3[map.bucket]
-        filename = find_next(bucket, stem, map.folder, modified)
+        filename = bucket.find_next(stem, modified, folder=map.folder)
         if filename is None:
             verbose(f"Skipping unmodified {stem}")
             return

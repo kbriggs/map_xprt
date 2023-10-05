@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from configparser import ConfigParser
+from datetime import datetime
 from typing import TYPE_CHECKING, IO, Iterator, Mapping, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
     from mypy_boto3_s3.service_resource import ObjectSummary
 
 from .state import read_json, state_path
+from .types import Uploader
 
 
 class Credentials:
@@ -44,7 +46,7 @@ class Credentials:
         return cls.from_dict(c) if c is not None else None
 
 
-class Bucket:
+class Bucket(Uploader):
     def __init__(self, bucket: str, region: str = None, creds=Credentials.load()):
         self.bucket_name = bucket
         self.region = (
@@ -94,6 +96,28 @@ class Bucket:
         for o in bucket.objects.filter(Prefix=prefix):
             if not o.key.endswith("/"):
                 yield o
+
+    def find_next(
+        self,
+        stem: str,
+        before: Optional[datetime] = None,
+        suffix: str = ".png",
+        folder: str = "",
+    ) -> Optional[str]:
+        try:
+            o = max(
+                self.find_matching(folder, stem),
+                key=lambda o: self.num_from_filename(o.key),
+            )
+        except ValueError as e:
+            if "empty sequence" in str(e):
+                return f"{stem}_{1:03}{suffix}"
+            raise
+        # verbose(f"{o} @ {o.last_modified}")
+        if before is not None and o.last_modified >= before:
+            return None
+
+        return f"{stem}_{self.num_from_filename(o.key)+1:03}{suffix}"
 
     def upload(self, file: IO[bytes], filename: str, folder: str = "") -> str:
         bucket = self._get_bucket()

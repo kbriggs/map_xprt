@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from configparser import ConfigParser
 from datetime import datetime
+from logging import getLogger
 from typing import TYPE_CHECKING, IO, Iterator, Mapping, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -12,6 +13,9 @@ if TYPE_CHECKING:
 
 from .state import read_json, state_path
 from .types import Uploader
+
+
+logger = getLogger(__name__.split(".")[-1])
 
 
 class Credentials:
@@ -113,7 +117,7 @@ class Bucket(Uploader):
             if "empty sequence" in str(e):
                 return f"{stem}_{1:03}{suffix}"
             raise
-        # verbose(f"{o} @ {o.last_modified}")
+        logger.info(f"{o} @ {o.last_modified}")
         if before is not None and o.last_modified >= before:
             return None
 

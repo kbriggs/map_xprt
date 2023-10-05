@@ -2,8 +2,8 @@
 
 import argparse
 from datetime import datetime
+import logging
 import re
-from typing import Optional
 
 from .config import Config, MapConfig, load_config
 from .drive import GoogleDrive, MediaType
@@ -12,12 +12,16 @@ from .s3 import Bucket
 from .types import Uploader
 
 
+logger = logging.getLogger(__name__.split(".")[-1])
+
+
 cli = argparse.ArgumentParser(description="Export a Google Drawing to an S3-hosted PNG")
 cli.add_argument("map", nargs="*", help="map(s) to convert")
 cli.add_argument(
     "-v",
     "--verbose",
-    action="store_true",
+    action="append_const",
+    const=10,
     help="Be more verbose (mostly for debugging)",
 )
 cli.add_argument(
@@ -82,9 +86,11 @@ def validate_args(args: argparse.Namespace):
             cli.error("Width and height cannot both be zero")
 
 
-def verbose(*args, **kwargs):
-    if opts.verbose:
-        print(*args, **kwargs)
+def logging_args(args: argparse.Namespace):
+    level = logging.WARNING - (sum(args.verbose) if args.verbose is not None else 0)
+    level = min(max(level, logging.DEBUG), logging.CRITICAL)
+    logging.basicConfig(level=level)
+    logger.debug(f"Logging level set to {logging._levelToName[level]}")
 
 
 def name_to_stem(name: str) -> str:
@@ -97,11 +103,11 @@ s3 = {}
 
 
 def process_map(cfg: Config, map: MapConfig):
-    verbose(f"stating {map.docid}")
+    logger.info(f"stating {map.docid}")
 
     doc = GoogleDrive(map.docid)
     stat = doc.stat()
-    verbose(stat)
+    logger.info(stat)
     stem = name_to_stem(stat["name"])
     if opts.force is True:
         modified = None
@@ -115,14 +121,14 @@ def process_map(cfg: Config, map: MapConfig):
         bucket = s3[map.bucket]
         filename = bucket.find_next(stem, modified, folder=map.folder)
         if filename is None:
-            verbose(f"Skipping unmodified {stem}")
+            logger.info(f"Skipping unmodified {stem}")
             return
 
     else:
         filename = opts.output
     assert filename is not None
 
-    verbose(
+    logger.info(
         f"{'Converting' if opts.only_convert else 'Converting and uploading'} {filename}"
     )
     if opts.dry_run is True:
@@ -153,13 +159,14 @@ def process_map(cfg: Config, map: MapConfig):
 def main():
     global opts
     opts = cli.parse_args()
-    verbose(opts)
+    logging_args(opts)
+    logger.debug(opts)
     validate_args(opts)
 
     # Read config
     cfg = load_config()
 
-    verbose(cfg)
+    logger.info(cfg)
     if len(opts.map) > 0:
         for n in opts.map:
             process_map(cfg, cfg.map(n))

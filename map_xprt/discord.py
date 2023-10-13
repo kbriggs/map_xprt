@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from logging import getLogger
 from os.path import basename
-from typing import IO, Callable, Mapping, Optional
+from typing import IO, Any, Callable, Mapping, Optional
 from urllib.parse import urljoin, urlparse
 from weakref import finalize
 
@@ -190,8 +191,22 @@ class Channel(Uploader):
             cursor = messages[-1]["id"]
         # never reached
 
-    def upload(self, file: IO[bytes], filename: str) -> str:
-        raise NotImplementedError("Discord upload WIP")  # FIXME
+    def upload(
+        self, file: IO[bytes], filename: str, title: Optional[str] = None
+    ) -> str:
+        payload: Mapping[str, Any]
+        payload = {"embeds": [{"image": {"url": f"attachment://{filename}"}}]}
+        if title is not None:
+            payload["embeds"][0]["title"] = title
+        message = self.api.post(
+            f"channels/{self.channel}/messages",
+            files={
+                "payload_json": (None, json.dumps(payload), "application/json"),
+                "files[0]": (filename, file, "image/png"),
+            },
+        ).json()
+        image = message["embeds"][0]["image"]
+        return image["proxy_url"] if "proxy_url" in image else image["url"]
 
     @classmethod
     def _finalize(cls, api: API):

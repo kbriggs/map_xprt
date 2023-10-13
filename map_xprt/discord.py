@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from logging import getLogger
+from os.path import basename
 from typing import IO, Callable, Mapping, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from weakref import finalize
 
 import requests
@@ -10,6 +12,9 @@ import tomli
 
 from .state import state_path
 from .types import Uploader
+
+
+logger = getLogger(__name__.split(".")[-1])
 
 
 class Credentials:
@@ -117,10 +122,73 @@ class Channel(Uploader):
         self.api = API(creds)
         self._final = finalize(self, self._finalize, self.api)
 
+        # Get our user object, validating our access in the process
+        self.user: dict = self.api.get("users/@me").json()
+
     def find_next(
         self, stem: str, before: Optional[datetime] = None, suffix: str = ".png"
     ) -> Optional[str]:
-        raise NotImplementedError("Discord upload WIP")  # FIXME
+        # First, use the channel object to find the most recent message ID
+        chan = self.api.get(f"channels/{self.channel}").json()
+        try:
+            cursor = chan["last_message_id"]
+        except KeyError:
+            # no messages at all in channel? so no previous upload
+            return f"{stem}_{1:03}{suffix}"
+
+        # Now iterate back through messages until we find one that is:
+        #  1) send by our current user
+        #  2) an image upload
+        #  3) with a filename matching the stem
+        messages: Optional[list] = None
+        while True:
+            messages = self.api.get(
+                f"channels/{self.channel}/messages",
+                params={
+                    ("before" if messages is not None else "around"): cursor,
+                    "limit": 100,
+                },
+            ).json()
+            if not messages:
+                # reached the beginning of the channel without finding a match,
+                # this is the first upload for this map
+                return f"{stem}_{1:03}{suffix}"
+
+            for message in messages:
+                # check authored by current user
+                if message["author"]["id"] != self.user["id"]:
+                    continue
+                try:
+                    # XXX: assumes we only ever post a single embed per message
+                    image = message["embeds"][0]["image"]
+                except KeyError:
+                    # not an image post
+                    continue
+
+                # check image upload
+                try:
+                    url = image["proxy_url"]
+                except KeyError:
+                    try:
+                        url = image["url"]
+                    except KeyError:
+                        # image without a URL??
+                        continue
+                filename: str = basename(urlparse(url).path)
+
+                # check filename matches stem
+                if filename.startswith(stem):
+                    logger.info(f"{filename} @ {message['timestamp']}")
+                    if (
+                        before is not None
+                        and datetime.fromisoformat(message["timestamp"]) >= before
+                    ):
+                        return None
+
+                    return f"{stem}_{self.num_from_filename(filename)+1:03}{suffix}"
+
+            cursor = messages[-1]["id"]
+        # never reached
 
     def upload(self, file: IO[bytes], filename: str) -> str:
         raise NotImplementedError("Discord upload WIP")  # FIXME

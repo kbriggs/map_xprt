@@ -2,13 +2,17 @@ from __future__ import annotations
 
 # Standard python libs
 import os
-from typing import Any, Iterator, List, Mapping, Optional
+from abc import abstractmethod
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Type, TypeVar
 
 # Common PyPI libs
 import tomli
 
 # Local libs
 from .state import state_path
+from .types import Uploader
+from . import s3
+from . import discord
 
 
 DEFAULT_CWD = "map_xprt.toml"
@@ -22,21 +26,87 @@ def default_file() -> str:
 # TODO: tighten up to Mapping[str, str | ConfigDict]
 ConfigDict = Mapping[str, Any]
 
+TTarget = TypeVar("TTarget", bound="MapTarget")  # type nonsense, see PEP673
+
+
+class MapTarget:
+    @staticmethod
+    @abstractmethod
+    def config_key() -> str:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def uploader() -> Type[Uploader]:
+        pass
+
+    @abstractmethod
+    def derive(self: TTarget, *args, **kwargs) -> TTarget:
+        pass
+
+
+class S3Target(MapTarget):
+    @staticmethod
+    def config_key() -> str:
+        return "s3"
+
+    @staticmethod
+    def uploader() -> Type[Uploader]:
+        return s3.Bucket
+
+    def __init__(
+        self, bucket: str, folder: Optional[str] = None, region: Optional[str] = None
+    ):
+        self.bucket = bucket
+        self.folder = folder
+        self.region = region
+
+    def _join_folder(self, folder: Optional[str]) -> str:
+        return os.path.normpath(
+            os.path.join(
+                self.folder if self.folder is not None else "/",
+                folder if folder is not None else ".",
+            )
+        ).lstrip("/")
+
+    def derive(
+        self: S3Target,
+        bucket: Optional[str] = None,
+        folder: Optional[str] = None,
+        region: Optional[str] = None,
+        *args,
+        **kwargs,
+    ) -> S3Target:
+        return type(self)(
+            bucket if bucket is not None else self.bucket,
+            self._join_folder(folder),
+            region if region is not None else self.region,
+        )
+
+
+class DiscordTarget(MapTarget):
+    @staticmethod
+    def config_key() -> str:
+        return "discord"
+
+    @staticmethod
+    def uploader() -> Type[Uploader]:
+        return discord.Channel
+
+    pass
+
 
 class MapConfig:
     def __init__(
         self,
         name: str,
         docid: str,
-        s3_bucket: str,
-        s3_folder: str,
+        target: MapTarget,
         crop: Optional[List[float]] = None,
     ):
-        # TODO specify per-map s3 region?
         self.name = name
         self.docid = docid
-        self.bucket = s3_bucket
-        self.folder = s3_folder
+        self.target = target
         assert crop is None or len(crop) == 4
         self.crop = crop
 
@@ -49,14 +119,11 @@ class CampaignConfig:
         self,
         title: Optional[str] = None,
         short: Optional[str] = None,
-        s3_bucket: Optional[str] = None,
-        s3_folder: Optional[str] = None,
+        target: Optional[MapTarget] = None,
     ):
-        # TODO specify per-campaign s3 region?
         self.title = title
         self.shortname = short
-        self.bucket = s3_bucket
-        self.folder = s3_folder
+        self.target = target
 
     def __str__(self):
         return f"{self.name}: {self.bucket}/{self.folder}"
@@ -64,9 +131,7 @@ class CampaignConfig:
 
 class Config:
     def __init__(self, s3_bucket: str, s3_folder: str = None, s3_region: str = None):
-        self.bucket = s3_bucket
-        self.folder = s3_folder
-        self.region = s3_region
+        self.target = S3Target(s3_bucket, s3_folder, s3_region)
         self.campaigns: Dict[str, CampaignConfig] = {}
         self.maps: List[MapConfig] = []  # TODO map name->config?
 
@@ -107,28 +172,20 @@ class Config:
                 for m in cls._find_maps(c[n], name):
                     yield m
 
-    def _join_folder(self, folder: str) -> str:
-        return os.path.normpath(
-            os.path.join(
-                self.folder if self.folder is not None else "/",
-                folder if folder is not None else ".",
-            )
-        ).lstrip("/")
-
     def _add_campaign(self, m: ConfigDict) -> None:
-        args: Dict[str, Optional[str]] = {
-            "s3_bucket": self.bucket,
-            "s3_folder": self.folder,
-        }
+        args = {}
         if "title" in m:
             args["title"] = m["title"]
         if "shortname" in m:
             args["short"] = m["shortname"]
         if "s3" in m:
-            if "bucket" in m["s3"]:
-                args["s3_bucket"] = m["s3"]["bucket"]
-            if "folder" in m["s3"]:
-                args["s3_folder"] = self._join_folder(m["s3"]["folder"])
+            args["target"] = self.target.derive(
+                bucket=m["s3"]["bucket"] if "bucket" in m["s3"] else None,
+                folder=m["s3"]["folder"] if "folder" in m["s3"] else None,
+                region=m["s3"]["region"] if "region" in m["s3"] else None,
+            )
+        else:
+            args["target"] = self.target.derive()
         obj = CampaignConfig(**args)
         self.campaigns[m["name"]] = obj
         if obj.shortname is not None:
@@ -138,14 +195,17 @@ class Config:
         args = {
             "name": m["name"],
             "docid": m["docid"],
-            "s3_bucket": self.bucket,
-            "s3_folder": self.folder,
         }
         if "s3" in m:
-            if "bucket" in m["s3"]:
-                args["s3_bucket"] = m["s3"]["bucket"]
-            if "folder" in m["s3"]:
-                args["s3_folder"] = self._join_folder(m["s3"]["folder"])
+            # FIXME: derive from campaign target
+            args["target"] = self.target.derive(
+                bucket=m["s3"]["bucket"] if "bucket" in m["s3"] else None,
+                folder=m["s3"]["folder"] if "folder" in m["s3"] else None,
+                region=m["s3"]["region"] if "region" in m["s3"] else None,
+            )
+        else:
+            # FIXME: use campaign target
+            args["target"] = self.target.derive()
         if "crop" in m:
             args["crop"] = m["crop"]
         self.maps.append(MapConfig(**args))

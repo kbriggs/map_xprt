@@ -47,11 +47,11 @@ def check_cfg(config_data):
     def _check_cfg(cfg: config.Config):
         assert "s3" in config_data
         if "region" in config_data["s3"]:
-            assert cfg.region == config_data["s3"]["region"]
+            assert cfg.target.region == config_data["s3"]["region"]
         else:
-            assert cfg.region is None
-        assert cfg.bucket == config_data["s3"]["bucket"]
-        assert cfg.folder == config_data["s3"]["folder"]
+            assert cfg.target.region is None
+        assert cfg.target.bucket == config_data["s3"]["bucket"]
+        assert cfg.target.folder == config_data["s3"]["folder"]
 
     return _check_cfg
 
@@ -111,8 +111,9 @@ def test_map_lookup_data(config_data, path: Sequence[str]):
         assert map.crop == data["crop"]
     else:
         assert map.crop is None
-    assert map.bucket is not None
-    assert map.folder is not None
+    assert isinstance(map.target, config.S3Target)
+    assert map.target.bucket is not None
+    assert map.target.folder is not None
     s3 = config_data["s3"] if "s3" in config_data else {}
     if "s3" in data:
         if "bucket" in data["s3"]:
@@ -124,5 +125,5 @@ def test_map_lookup_data(config_data, path: Sequence[str]):
                 if "folder" in s3
                 else data["s3"]["folder"]
             )
-    assert map.bucket == s3["bucket"]
-    assert map.folder == s3["folder"]
+    assert map.target.bucket == s3["bucket"]
+    assert map.target.folder == s3["folder"]

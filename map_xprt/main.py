@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 import re
 
-from .config import Config, MapConfig, load_config
+from .config import Config, MapConfig, S3Target, load_config
 from .drive import GoogleDrive, MediaType
 from .render import Box, SVGRenderer
 from .s3 import Bucket
@@ -116,10 +116,13 @@ def process_map(cfg: Config, map: MapConfig):
 
     if opts.output is None:
         # need the s3 bucket to find file number and compare timestamps
-        if map.bucket not in s3:
-            s3[map.bucket] = Bucket(map.bucket, cfg.region)
-        bucket = s3[map.bucket]
-        filename = bucket.find_next(stem, modified, folder=map.folder)
+        assert (  # FIXME
+            isinstance(map.target, S3Target) and map.target.folder is not None
+        )
+        if map.target.bucket not in s3:
+            s3[map.target.bucket] = Bucket(map.target.bucket, map.target.region)
+        bucket = s3[map.target.bucket]
+        filename = bucket.find_next(stem, modified, folder=map.target.folder)
         if filename is None:
             logger.info(f"Skipping unmodified {stem}")
             return
@@ -153,7 +156,10 @@ def process_map(cfg: Config, map: MapConfig):
         with r.render(svg, open(filename, "wb") if opts.only_convert else None) as png:
             if not opts.only_convert:
                 png.seek(0)
-                print(bucket.upload(png, filename, map.folder))
+                assert (  # FIXME
+                    isinstance(map.target, S3Target) and map.target.folder is not None
+                )
+                print(bucket.upload(png, filename, map.target.folder))
 
 
 def main():

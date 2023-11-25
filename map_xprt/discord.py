@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from logging import getLogger
 from os.path import basename
 from typing import IO, Any, Callable, Mapping, Optional
@@ -13,7 +13,6 @@ import tomli
 
 from .state import state_path
 from .types import Uploader
-
 
 logger = getLogger(__name__.split(".")[-1])
 

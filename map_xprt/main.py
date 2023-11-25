@@ -1,16 +1,15 @@
 #! /usr/bin/env python
 
 import argparse
-from datetime import datetime
 import logging
 import re
+from datetime import datetime
 
 from .config import Config, MapConfig, S3Target, load_config
 from .drive import GoogleDrive, MediaType
 from .render import Box, SVGRenderer
 from .s3 import Bucket
 from .types import Uploader
-
 
 logger = logging.getLogger(__name__.split(".")[-1])
 

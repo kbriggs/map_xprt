@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 DOTPATH = "~/.map_xprt"
 

@@ -9,11 +9,9 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Type, TypeVar
 import tomli
 
 # Local libs
+from . import discord, s3
 from .state import state_path
 from .types import Uploader
-from . import s3
-from . import discord
-
 
 DEFAULT_CWD = "map_xprt.toml"
 DEFAULT_DOT = "config.toml"

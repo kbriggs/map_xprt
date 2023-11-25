@@ -3,7 +3,7 @@ from __future__ import annotations
 from configparser import ConfigParser
 from datetime import datetime
 from logging import getLogger
-from typing import TYPE_CHECKING, IO, Iterator, Mapping, Optional
+from typing import IO, TYPE_CHECKING, Iterator, Mapping, Optional
 from urllib.parse import urlparse, urlunparse
 
 from boto3 import resource as aws_resource
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from .state import read_json, state_path
 from .types import Uploader
-
 
 logger = getLogger(__name__.split(".")[-1])
 

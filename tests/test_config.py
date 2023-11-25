@@ -1,5 +1,5 @@
-from contextlib import contextmanager
 import os
+from contextlib import contextmanager
 from typing import Any, Mapping, Optional, Sequence
 
 import pytest  # type: ignore
@@ -7,7 +7,6 @@ import tomli
 
 from map_xprt import config
 from map_xprt.state import DOTPATH
-
 
 DATADIR = os.path.join("tests", "data")
 

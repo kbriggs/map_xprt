@@ -1,8 +1,8 @@
 # Standard python libs
-from enum import Enum
 import errno
 import os
 import tempfile
+from enum import Enum
 from typing import IO, Mapping, Optional, Sequence
 
 # Common PyPI libs

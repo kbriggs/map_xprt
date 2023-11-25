@@ -1,7 +1,7 @@
 from __future__ import annotations
-from math import ceil
 
 import tempfile
+from math import ceil
 from typing import IO, Optional
 from xml.etree import ElementTree
 

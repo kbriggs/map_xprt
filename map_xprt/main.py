@@ -5,11 +5,9 @@ import logging
 import re
 from datetime import datetime
 
-from .config import Config, MapConfig, S3Target, load_config
+from .config import Config, MapConfig, load_config
 from .drive import GoogleDrive, MediaType
 from .render import Box, SVGRenderer
-from .s3 import Bucket
-from .types import Uploader
 
 logger = logging.getLogger(__name__.split(".")[-1])
 
@@ -97,10 +95,6 @@ def name_to_stem(name: str) -> str:
     return re.sub(r"[^\w]", "", re.sub(r"[-\s]+", "_", name.lower()))
 
 
-# S3 buckets
-s3 = {}
-
-
 def process_map(cfg: Config, map: MapConfig):
     logger.info(f"stating {map.docid}")
 
@@ -114,14 +108,8 @@ def process_map(cfg: Config, map: MapConfig):
         modified = datetime.fromisoformat(re.sub(r"Z$", "+00:00", stat["modifiedTime"]))
 
     if opts.output is None:
-        # need the s3 bucket to find file number and compare timestamps
-        assert (  # FIXME
-            isinstance(map.target, S3Target) and map.target.folder is not None
-        )
-        if map.target.bucket not in s3:
-            s3[map.target.bucket] = Bucket(map.target.bucket, map.target.region)
-        bucket = s3[map.target.bucket]
-        filename = bucket.find_next(stem, modified, folder=map.target.folder)
+        uploader = map.target.uploader()
+        filename = uploader.find_next(stem, modified, **map.target.extra_args())
         if filename is None:
             logger.info(f"Skipping unmodified {stem}")
             return
@@ -155,10 +143,13 @@ def process_map(cfg: Config, map: MapConfig):
         with r.render(svg, open(filename, "wb") if opts.only_convert else None) as png:
             if not opts.only_convert:
                 png.seek(0)
-                assert (  # FIXME
-                    isinstance(map.target, S3Target) and map.target.folder is not None
+                if uploader is None:
+                    uploader = map.target.uploader()
+                print(
+                    uploader.upload(
+                        png, filename, title=stat["name"], **map.target.extra_args()
+                    )
                 )
-                print(bucket.upload(png, filename, map.target.folder))
 
 
 def main():

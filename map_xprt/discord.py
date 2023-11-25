@@ -191,7 +191,7 @@ class Channel(Uploader):
         # never reached
 
     def upload(
-        self, file: IO[bytes], filename: str, title: Optional[str] = None
+        self, file: IO[bytes], filename: str, title: Optional[str] = None, **kwargs
     ) -> str:
         payload: Mapping[str, Any]
         payload = {"embeds": [{"image": {"url": f"attachment://{filename}"}}]}

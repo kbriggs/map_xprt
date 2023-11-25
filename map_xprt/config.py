@@ -35,11 +35,19 @@ class MapTarget:
 
     @staticmethod
     @abstractmethod
-    def uploader() -> Type[Uploader]:
+    def uploader_cls() -> Type[Uploader]:
         pass
 
     @abstractmethod
     def derive(self: TTarget, *args, **kwargs) -> TTarget:
+        pass
+
+    @abstractmethod
+    def uploader(self) -> Uploader:
+        pass
+
+    @abstractmethod
+    def extra_args(self) -> Mapping[str, str]:
         pass
 
 
@@ -49,7 +57,7 @@ class S3Target(MapTarget):
         return "s3"
 
     @staticmethod
-    def uploader() -> Type[Uploader]:
+    def uploader_cls() -> Type[Uploader]:
         return s3.Bucket
 
     def __init__(
@@ -58,6 +66,9 @@ class S3Target(MapTarget):
         self.bucket = bucket
         self.folder = folder
         self.region = region
+
+    def __str__(self):
+        return f"{type(self).__name__}[{f'{self.region}:' if self.region is not None else ''}{self.bucket}/{self.folder or ''}]"
 
     def _join_folder(self, folder: Optional[str]) -> str:
         return os.path.normpath(
@@ -81,6 +92,13 @@ class S3Target(MapTarget):
             region if region is not None else self.region,
         )
 
+    def uploader(self) -> Uploader:
+        return s3.Bucket(self.bucket, self.region)
+
+    def extra_args(self) -> Mapping[str, str]:
+        assert self.folder is not None
+        return {"folder": self.folder}
+
 
 class DiscordTarget(MapTarget):
     @staticmethod
@@ -88,10 +106,32 @@ class DiscordTarget(MapTarget):
         return "discord"
 
     @staticmethod
-    def uploader() -> Type[Uploader]:
+    def uploader_cls() -> Type[Uploader]:
         return discord.Channel
 
-    pass
+    def __init__(self, channel: Optional[str] = None):
+        self.channel = channel
+
+    def __str__(self):
+        return f"{type(self).__name__}[{self.channel}]"
+
+    def derive(
+        self: DiscordTarget, channel: Optional[str] = None, *args, **kwargs
+    ) -> DiscordTarget:
+        return type(self)(channel if channel is not None else self.channel)
+
+    def uploader(self) -> Uploader:
+        assert self.channel is not None
+        return discord.Channel(self.channel)
+
+    def extra_args(self) -> Mapping[str, str]:
+        return {}
+
+
+ALL_TARGETS: Dict[str, Type[MapTarget]] = {
+    "s3": S3Target,
+    "discord": DiscordTarget,
+}
 
 
 class MapConfig:
@@ -130,19 +170,15 @@ class CampaignConfig:
 
 
 class Config:
-    def __init__(self, s3_bucket: str, s3_folder: str = None, s3_region: str = None):
-        self.target = S3Target(s3_bucket, s3_folder, s3_region)
+    def __init__(self, target):
+        self.target = target
         self.campaigns: Dict[str, CampaignConfig] = {}
         self.maps: List[MapConfig] = []  # TODO map name->config?
 
     @classmethod
     def from_config(cls, c: ConfigDict) -> Config:
-        args = {"s3_bucket": c["s3"]["bucket"]}
-        if "folder" in c["s3"]:
-            args["s3_folder"] = c["s3"]["folder"]
-        if "region" in c["s3"]:
-            args["s3_region"] = c["s3"]["region"]
-        cfg = cls(**args)
+        tgtcls = ALL_TARGETS[c["target"]]
+        cfg = cls(tgtcls(**c[tgtcls.config_key()]))
         if "campaign" in c:
             for p in cls._find_campaigns(c["campaign"]):
                 cfg._add_campaign(p)
@@ -187,14 +223,15 @@ class Config:
             args["title"] = m["title"]
         if "shortname" in m:
             args["short"] = m["shortname"]
-        if "s3" in m:
+        tgtcls = ALL_TARGETS[m["target"]] if "target" in m else type(self.target)
+        if issubclass(tgtcls, type(self.target)):
             args["target"] = self.target.derive(
-                bucket=m["s3"]["bucket"] if "bucket" in m["s3"] else None,
-                folder=m["s3"]["folder"] if "folder" in m["s3"] else None,
-                region=m["s3"]["region"] if "region" in m["s3"] else None,
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
             )
         else:
-            args["target"] = self.target.derive()
+            args["target"] = tgtcls(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
+            )
         obj = CampaignConfig(**args)
         self.campaigns[m["name"]] = obj
         if obj.shortname is not None:
@@ -211,14 +248,15 @@ class Config:
             parent_target = campaign.target or self.target
         else:
             parent_target = self.target
-        if "s3" in m:
+        tgtcls = ALL_TARGETS[m["target"]] if "target" in m else type(parent_target)
+        if tgtcls == type(parent_target):
             args["target"] = parent_target.derive(
-                bucket=m["s3"]["bucket"] if "bucket" in m["s3"] else None,
-                folder=m["s3"]["folder"] if "folder" in m["s3"] else None,
-                region=m["s3"]["region"] if "region" in m["s3"] else None,
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
             )
         else:
-            args["target"] = parent_target.derive()
+            args["target"] = tgtcls(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
+            )
         if "crop" in m:
             args["crop"] = m["crop"]
         self.maps.append(MapConfig(**args))

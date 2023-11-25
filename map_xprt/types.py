@@ -10,7 +10,7 @@ class Uploader(abc.ABC):
     """A class to upload rasterized maps to some cloud storage."""
 
     @abc.abstractmethod
-    def upload(self, file: IO[bytes], filename: str) -> str:
+    def upload(self, file: IO[bytes], filename: str, **kwargs) -> str:
         pass
 
     @abc.abstractmethod

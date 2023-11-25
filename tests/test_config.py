@@ -179,3 +179,26 @@ def test_map_campaign_lookup_data(
     assert map.target.folder == os.path.join(
         campaign.target.folder, data["s3"]["folder"]
     )
+
+
+@pytest.mark.parametrize(
+    "path, campaign_path",
+    [
+        (("lox", "starmoth"), ("sjlox",)),
+    ],
+)
+def test_map_discord(config_data, path: Sequence[str], campaign_path: Sequence[str]):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["map"], path)
+    name = ".".join(path)
+    map = cfg.map(name)
+    assert map.name == name
+    campaign = cfg.campaign(".".join(campaign_path))
+    assert map.campaign == campaign
+    assert isinstance(campaign.target, config.DiscordTarget)
+    assert isinstance(map.target, config.DiscordTarget)
+    assert map.target.channel is not None
+    assert campaign.target.channel is not None
+    assert campaign.target.channel == map.target.channel
+    cdata = by_path(config_data["campaign"], campaign_path)
+    assert map.target.channel == cdata["discord"]["channel"]

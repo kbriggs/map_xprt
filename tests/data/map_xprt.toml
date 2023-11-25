@@ -5,12 +5,12 @@ s3.folder = "spelljammer-academy"
 [campaign.sja.port]
 title = "Spelljammer Academy - Port"
 s3.folder = "port"
-shortname = "port"
+shortname = "sjport"
 
 [campaign.sja.starboard]
 title = "Spelljammer Academy - Starboard"
 s3.folder = "starboard"
-shortname = "sbrd"
+shortname = "sjsbrd"
 
 [map.port.moonraider]
 docid = "2Q_4WxYCWNSdJO7SVZ3Z1CNhU3c4MnX04wlo_bBisiFx"
@@ -48,12 +48,12 @@ crop = [50, 140, 480, 415]
 docid = "2y-bDelVMRAo3AafelzuBnNasan52_JHEOa3FWYmxELx"
 crop = [50, 140, 480, 415]
 
-[map.port.tyrant]
+[map.sjport.tyrant]
 docid = "2Nto_vB75FV5hoK8ZALOJy1_kx7YHOyd01ocaKaKtA6Q"
 s3.folder = "tyrant"
 crop = [700, 100, 180, 225]
 
-[map.sbrd.tyrant]
+[map.sjsbrd.tyrant]
 docid = "2feRoA1Is5SXVpXENyv4ion3QZf0bPumz9XavtEbr2AK"
 s3.folder = "tyrant"
 crop = [700, 100, 180, 225]

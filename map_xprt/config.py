@@ -101,12 +101,14 @@ class MapConfig:
         docid: str,
         target: MapTarget,
         crop: Optional[List[float]] = None,
+        campaign: Optional[CampaignConfig] = None,
     ):
         self.name = name
         self.docid = docid
         self.target = target
         assert crop is None or len(crop) == 4
         self.crop = crop
+        self.campaign = campaign
 
     def __str__(self):
         return f"{self.name}: {self.docid} -> {self.bucket}/{self.folder}"
@@ -147,6 +149,15 @@ class Config:
         for m in cls._find_maps(c["map"]):
             cfg._add_map(m)
         return cfg
+
+    def _match_campaign(self, map_name: str) -> Optional[CampaignConfig]:
+        path = map_name.split(".")
+        for i in range(len(path) - 1):
+            try:
+                return self.campaign(".".join(path[: i + 1]))
+            except KeyError:
+                pass
+        return None
 
     @classmethod
     def _find_campaigns(cls, c: ConfigDict, parent: str = None) -> Iterator[ConfigDict]:
@@ -194,16 +205,20 @@ class Config:
             "name": m["name"],
             "docid": m["docid"],
         }
+        campaign = self._match_campaign(m["name"])
+        if campaign is not None:
+            args["campaign"] = campaign
+            parent_target = campaign.target or self.target
+        else:
+            parent_target = self.target
         if "s3" in m:
-            # FIXME: derive from campaign target
-            args["target"] = self.target.derive(
+            args["target"] = parent_target.derive(
                 bucket=m["s3"]["bucket"] if "bucket" in m["s3"] else None,
                 folder=m["s3"]["folder"] if "folder" in m["s3"] else None,
                 region=m["s3"]["region"] if "region" in m["s3"] else None,
             )
         else:
-            # FIXME: use campaign target
-            args["target"] = self.target.derive()
+            args["target"] = parent_target.derive()
         if "crop" in m:
             args["crop"] = m["crop"]
         self.maps.append(MapConfig(**args))
@@ -218,9 +233,12 @@ class Config:
         for m in self.maps:
             if m.name == name:
                 return m
-        raise (ValueError(name))
+        raise (KeyError(name))
+
+    def campaign(self, name: str) -> CampaignConfig:
+        return self.campaigns[name]
 
 
-def load_config(path=default_file()):
+def load_config(path=default_file()) -> Config:
     with open(path, "rb") as f:
         return Config.from_config(tomli.load(f))

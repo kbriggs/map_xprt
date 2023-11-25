@@ -126,3 +126,56 @@ def test_map_lookup_data(config_data, path: Sequence[str]):
             )
     assert map.target.bucket == s3["bucket"]
     assert map.target.folder == s3["folder"]
+    assert map.campaign is None
+
+
+@pytest.mark.parametrize(
+    "path,short",
+    [
+        (("sja", "port"), "sjport"),
+        (("sja", "starboard"), "sjsbrd"),
+    ],
+)
+def test_campaign_lookup_data(config_data, path: Sequence[str], short: str):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["campaign"], path)
+    name = ".".join(path)
+    campaign = cfg.campaign(name)
+    assert cfg.campaign(short) == campaign
+    assert campaign.shortname == short
+    assert campaign.title == data["title"]
+    assert isinstance(campaign.target, config.S3Target)
+    assert campaign.target.region is None
+    assert campaign.target.bucket == config_data["s3"]["bucket"]
+    assert campaign.target.folder == os.path.join(
+        config_data["s3"]["folder"], data["s3"]["folder"]
+    )
+
+
+@pytest.mark.parametrize(
+    "path,campaign_short",
+    [
+        (("sjport", "tyrant"), "sjport"),
+        (("sjsbrd", "tyrant"), "sjsbrd"),
+        (("sja", "port", "qitru"), "sjport"),
+        (("sja", "starboard", "qitru"), "sjsbrd"),
+    ],
+)
+def test_map_campaign_lookup_data(
+    config_data, path: Sequence[str], campaign_short: str
+):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["map"], path)
+    name = ".".join(path)
+    map = cfg.map(name)
+    assert map.name == name
+    campaign = cfg.campaign(campaign_short)
+    assert map.campaign == campaign
+    assert isinstance(campaign.target, config.S3Target)
+    assert isinstance(map.target, config.S3Target)
+    assert map.target.bucket is not None
+    assert map.target.folder is not None
+    assert campaign.target.folder is not None
+    assert map.target.folder == os.path.join(
+        campaign.target.folder, data["s3"]["folder"]
+    )

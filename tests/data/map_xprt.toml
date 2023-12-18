@@ -1,0 +1,79 @@
+
+target = "s3"
+s3.bucket = "dnd_maps"
+s3.folder = "spelljammer-academy"
+
+[campaign.sja.port]
+title = "Spelljammer Academy - Port"
+s3.folder = "port"
+shortname = "sjport"
+
+[campaign.sja.starboard]
+title = "Spelljammer Academy - Starboard"
+s3.folder = "starboard"
+shortname = "sjsbrd"
+
+[map.port.moonraider]
+docid = "2Q_4WxYCWNSdJO7SVZ3Z1CNhU3c4MnX04wlo_bBisiFx"
+s3.folder = "port"
+
+[map.sbrd.moonraider]
+docid = "21tjHb3zgSxsD50kTFo65MWEdLA5v46Dt-9zwNstoaPF"
+s3.folder = "starboard"
+
+[map.port.intruder]
+docid = "28SBDIm2LIMDIYPA3d_sSaXx_3WQUvr2uQOgFcRgIINJ"
+s3.folder = "port"
+crop = [142, 0, 660, 600]
+
+[map.sbrd.intruder]
+docid = "2dI58OHXXfSIHSs1Vph8sQri68-dBA7jc-DulNGWleDR"
+s3.folder = "starboard"
+crop = [142, 0, 660, 600]
+
+[map.port.wildspace]
+docid = "23C4B6VKnarQre8qVB3wg_ix7JLUJghle73RyT1uxVX0"
+s3.folder = "port"
+crop = [48, 144, 576, 432]
+
+[map.sbrd.wildspace]
+docid = "2-uaz6G4n4gtm7105NwuyZPfv8J8iD2wzyBigqkw2OsA"
+s3.folder = "starboard"
+crop = [48, 144, 576, 432]
+
+[map.port.cavern]
+docid = "2irK9CdE5asNOOkiA_ZSyuacJn9c7ALx6h5KjkEleB3a"
+crop = [50, 140, 480, 415]
+
+[map.sbrd.cavern]
+docid = "2y-bDelVMRAo3AafelzuBnNasan52_JHEOa3FWYmxELx"
+crop = [50, 140, 480, 415]
+
+[map.sjport.tyrant]
+docid = "2Nto_vB75FV5hoK8ZALOJy1_kx7YHOyd01ocaKaKtA6Q"
+s3.folder = "tyrant"
+crop = [700, 100, 180, 225]
+
+[map.sjsbrd.tyrant]
+docid = "2feRoA1Is5SXVpXENyv4ion3QZf0bPumz9XavtEbr2AK"
+s3.folder = "tyrant"
+crop = [700, 100, 180, 225]
+
+[map.sja.port.qitru]
+docid = "2Nto_vB75FV5hoK8ZALOJy1_kx7YHOyd01ocaKaKtA6Q"
+s3.folder = "tyrant"
+crop = [700, 100, 180, 225]
+
+[map.sja.starboard.qitru]
+docid = "2feRoA1Is5SXVpXENyv4ion3QZf0bPumz9XavtEbr2AK"
+s3.folder = "tyrant"
+crop = [700, 100, 180, 225]
+
+[campaign.sjlox]
+title = "Spelljammer: Light of Xaryxis"
+shortname = "lox"
+target = "discord"
+discord.channel = "9429462660087932332"
+
+[map.lox.starmoth]
+docid = "2udSqObvBJoq7kRxSmyRBkvJE_AoapwY-v-K6FvM5KF7"

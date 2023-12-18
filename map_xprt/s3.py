@@ -3,7 +3,7 @@ from __future__ import annotations
 from configparser import ConfigParser
 from datetime import datetime
 from logging import getLogger
-from typing import TYPE_CHECKING, IO, Iterator, Mapping, Optional
+from typing import IO, TYPE_CHECKING, Iterator, Mapping, Optional
 from urllib.parse import urlparse, urlunparse
 
 from boto3 import resource as aws_resource
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from .state import read_json, state_path
 from .types import Uploader
-
 
 logger = getLogger(__name__.split(".")[-1])
 
@@ -123,7 +122,7 @@ class Bucket(Uploader):
 
         return f"{stem}_{self.num_from_filename(o.key)+1:03}{suffix}"
 
-    def upload(self, file: IO[bytes], filename: str, folder: str = "") -> str:
+    def upload(self, file: IO[bytes], filename: str, folder: str = "", **kwargs) -> str:
         bucket = self._get_bucket()
         key = f"{folder}/{filename}".lstrip("/")
         bucket.upload_fileobj(file, key, ExtraArgs={"ContentType": "image/png"})

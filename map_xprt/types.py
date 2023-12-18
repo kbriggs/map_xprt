@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import abc
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import IO, Optional
 
 
@@ -10,7 +10,7 @@ class Uploader(abc.ABC):
     """A class to upload rasterized maps to some cloud storage."""
 
     @abc.abstractmethod
-    def upload(self, file: IO[bytes], filename: str) -> str:
+    def upload(self, file: IO[bytes], filename: str, **kwargs) -> str:
         pass
 
     @abc.abstractmethod

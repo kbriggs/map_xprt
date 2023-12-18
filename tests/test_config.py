@@ -1,0 +1,204 @@
+import os
+from contextlib import contextmanager
+from typing import Any, Mapping, Optional, Sequence
+
+import pytest  # type: ignore
+import tomli
+
+from map_xprt import config
+from map_xprt.state import DOTPATH
+
+DATADIR = os.path.join("tests", "data")
+
+
+@contextmanager
+def workdir(dir: Optional[str]):
+    if dir is not None:
+        prev_dir = os.getcwd()
+        os.chdir(dir)
+    try:
+        yield
+    finally:
+        if dir is not None:
+            os.chdir(prev_dir)
+
+
+@pytest.mark.parametrize(
+    "dir,expected",
+    [
+        (None, os.path.expanduser(os.path.join(DOTPATH, config.DEFAULT_DOT))),
+        (DATADIR, config.DEFAULT_CWD),
+    ],
+)
+def test_default_file(dir: Optional[str], expected: str):
+    with workdir(dir):
+        assert os.path.realpath(config.default_file()) == os.path.realpath(expected)
+
+
+@pytest.fixture(scope="module")
+def config_data():
+    with open(os.path.join(DATADIR, config.DEFAULT_CWD), "rb") as f:
+        return tomli.load(f)
+
+
+@pytest.fixture
+def check_cfg(config_data):
+    def _check_cfg(cfg: config.Config):
+        assert "s3" in config_data
+        if "region" in config_data["s3"]:
+            assert cfg.target.region == config_data["s3"]["region"]
+        else:
+            assert cfg.target.region is None
+        assert cfg.target.bucket == config_data["s3"]["bucket"]
+        assert cfg.target.folder == config_data["s3"]["folder"]
+
+    return _check_cfg
+
+
+@pytest.mark.skip(
+    "Default arguments are evaluated as function definition time, so this test can never work"
+)
+def test_load_config_default(config_data, check_cfg):
+    with workdir(DATADIR):
+        cfg = config.load_config()
+        check_cfg(cfg)
+
+
+def test_load_config_data(config_data, check_cfg):
+    cfg = config.load_config(os.path.join(DATADIR, config.DEFAULT_CWD))
+    check_cfg(cfg)
+
+
+def test_load_config_construct(config_data, check_cfg):
+    cfg = config.Config.from_config(config_data)
+    check_cfg(cfg)
+
+
+def test_map_lookup_self(config_data):
+    cfg = config.Config.from_config(config_data)
+    assert len(cfg.maps) > 0
+    for m in cfg.maps:
+        assert m == cfg.map(m.name)
+
+
+def by_path(d: Mapping[str, Any], key: Sequence[str]):
+    if not key:
+        return d
+    return by_path(d[key[0]], key[1:])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("port", "moonraider"),
+        ("sbrd", "moonraider"),
+        ("port", "intruder"),
+        ("sbrd", "wildspace"),
+    ],
+)
+def test_map_lookup_data(config_data, path: Sequence[str]):
+    cfg = config.Config.from_config(config_data)
+    name = ".".join(path)
+    map = cfg.map(name)
+    assert map.name == name
+    data = by_path(config_data["map"], path)
+    assert map.docid is not None
+    assert map.docid == data["docid"]
+    if "crop" in data:
+        assert map.crop is not None
+        assert len(map.crop)
+        assert map.crop == data["crop"]
+    else:
+        assert map.crop is None
+    assert isinstance(map.target, config.S3Target)
+    assert map.target.bucket is not None
+    assert map.target.folder is not None
+    s3 = config_data["s3"] if "s3" in config_data else {}
+    if "s3" in data:
+        if "bucket" in data["s3"]:
+            s3["bucket"] = data["s3"]["bucket"]
+        if "folder" in data["s3"]:
+            # TODO: more complex paths e.g. ".." components
+            s3["folder"] = (
+                f"{s3['folder']}/{data['s3']['folder']}"
+                if "folder" in s3
+                else data["s3"]["folder"]
+            )
+    assert map.target.bucket == s3["bucket"]
+    assert map.target.folder == s3["folder"]
+    assert map.campaign is None
+
+
+@pytest.mark.parametrize(
+    "path,short",
+    [
+        (("sja", "port"), "sjport"),
+        (("sja", "starboard"), "sjsbrd"),
+    ],
+)
+def test_campaign_lookup_data(config_data, path: Sequence[str], short: str):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["campaign"], path)
+    name = ".".join(path)
+    campaign = cfg.campaign(name)
+    assert cfg.campaign(short) == campaign
+    assert campaign.shortname == short
+    assert campaign.title == data["title"]
+    assert isinstance(campaign.target, config.S3Target)
+    assert campaign.target.region is None
+    assert campaign.target.bucket == config_data["s3"]["bucket"]
+    assert campaign.target.folder == os.path.join(
+        config_data["s3"]["folder"], data["s3"]["folder"]
+    )
+
+
+@pytest.mark.parametrize(
+    "path,campaign_short",
+    [
+        (("sjport", "tyrant"), "sjport"),
+        (("sjsbrd", "tyrant"), "sjsbrd"),
+        (("sja", "port", "qitru"), "sjport"),
+        (("sja", "starboard", "qitru"), "sjsbrd"),
+    ],
+)
+def test_map_campaign_lookup_data(
+    config_data, path: Sequence[str], campaign_short: str
+):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["map"], path)
+    name = ".".join(path)
+    map = cfg.map(name)
+    assert map.name == name
+    campaign = cfg.campaign(campaign_short)
+    assert map.campaign == campaign
+    assert isinstance(campaign.target, config.S3Target)
+    assert isinstance(map.target, config.S3Target)
+    assert map.target.bucket is not None
+    assert map.target.folder is not None
+    assert campaign.target.folder is not None
+    assert map.target.folder == os.path.join(
+        campaign.target.folder, data["s3"]["folder"]
+    )
+
+
+@pytest.mark.parametrize(
+    "path, campaign_path",
+    [
+        (("lox", "starmoth"), ("sjlox",)),
+    ],
+)
+def test_map_discord(config_data, path: Sequence[str], campaign_path: Sequence[str]):
+    cfg = config.Config.from_config(config_data)
+    data = by_path(config_data["map"], path)
+    name = ".".join(path)
+    map = cfg.map(name)
+    assert map.name == name
+    campaign = cfg.campaign(".".join(campaign_path))
+    assert map.campaign == campaign
+    assert isinstance(campaign.target, config.DiscordTarget)
+    assert isinstance(map.target, config.DiscordTarget)
+    assert map.target.channel is not None
+    assert campaign.target.channel is not None
+    assert campaign.target.channel == map.target.channel
+    cdata = by_path(config_data["campaign"], campaign_path)
+    assert map.target.channel == cdata["discord"]["channel"]

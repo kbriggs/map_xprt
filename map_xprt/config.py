@@ -2,14 +2,16 @@ from __future__ import annotations
 
 # Standard python libs
 import os
-from typing import Any, Iterator, List, Mapping
+from abc import abstractmethod
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Type, TypeVar
 
 # Common PyPI libs
 import tomli
 
 # Local libs
+from . import discord, s3
 from .state import state_path
-
+from .types import Uploader
 
 DEFAULT_CWD = "map_xprt.toml"
 DEFAULT_DOT = "config.toml"
@@ -22,46 +24,187 @@ def default_file() -> str:
 # TODO: tighten up to Mapping[str, str | ConfigDict]
 ConfigDict = Mapping[str, Any]
 
+TTarget = TypeVar("TTarget", bound="MapTarget")  # type nonsense, see PEP673
+
+
+class MapTarget:
+    @staticmethod
+    @abstractmethod
+    def config_key() -> str:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def uploader_cls() -> Type[Uploader]:
+        pass
+
+    @abstractmethod
+    def derive(self: TTarget, *args, **kwargs) -> TTarget:
+        pass
+
+    @abstractmethod
+    def uploader(self) -> Uploader:
+        pass
+
+    @abstractmethod
+    def extra_args(self) -> Mapping[str, str]:
+        pass
+
+
+class S3Target(MapTarget):
+    @staticmethod
+    def config_key() -> str:
+        return "s3"
+
+    @staticmethod
+    def uploader_cls() -> Type[Uploader]:
+        return s3.Bucket
+
+    def __init__(
+        self, bucket: str, folder: Optional[str] = None, region: Optional[str] = None
+    ):
+        self.bucket = bucket
+        self.folder = folder
+        self.region = region
+
+    def __str__(self):
+        return f"{type(self).__name__}[{f'{self.region}:' if self.region is not None else ''}{self.bucket}/{self.folder or ''}]"
+
+    def _join_folder(self, folder: Optional[str]) -> str:
+        return os.path.normpath(
+            os.path.join(
+                self.folder if self.folder is not None else "/",
+                folder if folder is not None else ".",
+            )
+        ).lstrip("/")
+
+    def derive(
+        self: S3Target,
+        bucket: Optional[str] = None,
+        folder: Optional[str] = None,
+        region: Optional[str] = None,
+        *args,
+        **kwargs,
+    ) -> S3Target:
+        return type(self)(
+            bucket if bucket is not None else self.bucket,
+            self._join_folder(folder),
+            region if region is not None else self.region,
+        )
+
+    def uploader(self) -> Uploader:
+        return s3.Bucket(self.bucket, self.region)
+
+    def extra_args(self) -> Mapping[str, str]:
+        assert self.folder is not None
+        return {"folder": self.folder}
+
+
+class DiscordTarget(MapTarget):
+    @staticmethod
+    def config_key() -> str:
+        return "discord"
+
+    @staticmethod
+    def uploader_cls() -> Type[Uploader]:
+        return discord.Channel
+
+    def __init__(self, channel: Optional[str] = None):
+        self.channel = channel
+
+    def __str__(self):
+        return f"{type(self).__name__}[{self.channel}]"
+
+    def derive(
+        self: DiscordTarget, channel: Optional[str] = None, *args, **kwargs
+    ) -> DiscordTarget:
+        return type(self)(channel if channel is not None else self.channel)
+
+    def uploader(self) -> Uploader:
+        assert self.channel is not None
+        return discord.Channel(self.channel)
+
+    def extra_args(self) -> Mapping[str, str]:
+        return {}
+
+
+ALL_TARGETS: Dict[str, Type[MapTarget]] = {
+    "s3": S3Target,
+    "discord": DiscordTarget,
+}
+
 
 class MapConfig:
     def __init__(
         self,
         name: str,
         docid: str,
-        s3_bucket: str,
-        s3_folder: str,
-        crop: List[float] = None,
+        target: MapTarget,
+        crop: Optional[List[float]] = None,
+        campaign: Optional[CampaignConfig] = None,
     ):
-        # TODO specify per-map s3 region?
         self.name = name
         self.docid = docid
-        self.bucket = s3_bucket
-        self.folder = s3_folder
+        self.target = target
         assert crop is None or len(crop) == 4
         self.crop = crop
+        self.campaign = campaign
 
     def __str__(self):
         return f"{self.name}: {self.docid} -> {self.bucket}/{self.folder}"
 
 
+class CampaignConfig:
+    def __init__(
+        self,
+        title: Optional[str] = None,
+        short: Optional[str] = None,
+        target: Optional[MapTarget] = None,
+    ):
+        self.title = title
+        self.shortname = short
+        self.target = target
+
+    def __str__(self):
+        return f"{self.name}: {self.bucket}/{self.folder}"
+
+
 class Config:
-    def __init__(self, s3_bucket: str, s3_folder: str = None, s3_region: str = None):
-        self.bucket = s3_bucket
-        self.folder = s3_folder
-        self.region = s3_region
+    def __init__(self, target):
+        self.target = target
+        self.campaigns: Dict[str, CampaignConfig] = {}
         self.maps: List[MapConfig] = []  # TODO map name->config?
 
     @classmethod
     def from_config(cls, c: ConfigDict) -> Config:
-        args = {"s3_bucket": c["s3"]["bucket"]}
-        if "folder" in c["s3"]:
-            args["s3_folder"] = c["s3"]["folder"]
-        if "region" in c["s3"]:
-            args["s3_region"] = c["s3"]["region"]
-        cfg = cls(**args)
+        tgtcls = ALL_TARGETS[c["target"]]
+        cfg = cls(tgtcls(**c[tgtcls.config_key()]))
+        if "campaign" in c:
+            for p in cls._find_campaigns(c["campaign"]):
+                cfg._add_campaign(p)
         for m in cls._find_maps(c["map"]):
             cfg._add_map(m)
         return cfg
+
+    def _match_campaign(self, map_name: str) -> Optional[CampaignConfig]:
+        path = map_name.split(".")
+        for i in range(len(path) - 1):
+            try:
+                return self.campaign(".".join(path[: i + 1]))
+            except KeyError:
+                pass
+        return None
+
+    @classmethod
+    def _find_campaigns(cls, c: ConfigDict, parent: str = None) -> Iterator[ConfigDict]:
+        # TODO: add the key path as an attribute?
+        for n in c:
+            name = n if parent is None else ".".join((parent, n))
+            if "title" in c[n] or "shortname" in c[n]:
+                yield dict(c[n], name=name)
+            else:
+                for m in cls._find_campaigns(c[n], name):
+                    yield m
 
     @classmethod
     def _find_maps(cls, c: ConfigDict, parent: str = None) -> Iterator[ConfigDict]:
@@ -74,26 +217,46 @@ class Config:
                 for m in cls._find_maps(c[n], name):
                     yield m
 
-    def _join_folder(self, folder: str) -> str:
-        return os.path.normpath(
-            os.path.join(
-                self.folder if self.folder is not None else "/",
-                folder if folder is not None else ".",
+    def _add_campaign(self, m: ConfigDict) -> None:
+        args = {}
+        if "title" in m:
+            args["title"] = m["title"]
+        if "shortname" in m:
+            args["short"] = m["shortname"]
+        tgtcls = ALL_TARGETS[m["target"]] if "target" in m else type(self.target)
+        if issubclass(tgtcls, type(self.target)):
+            args["target"] = self.target.derive(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
             )
-        ).lstrip("/")
+        else:
+            args["target"] = tgtcls(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
+            )
+        obj = CampaignConfig(**args)
+        self.campaigns[m["name"]] = obj
+        if obj.shortname is not None:
+            self.campaigns[obj.shortname] = obj
 
     def _add_map(self, m: ConfigDict) -> None:
         args = {
             "name": m["name"],
             "docid": m["docid"],
-            "s3_bucket": self.bucket,
-            "s3_folder": self.folder,
         }
-        if "s3" in m:
-            if "bucket" in m["s3"]:
-                args["s3_bucket"] = m["s3"]["bucket"]
-            if "folder" in m["s3"]:
-                args["s3_folder"] = self._join_folder(m["s3"]["folder"])
+        campaign = self._match_campaign(m["name"])
+        if campaign is not None:
+            args["campaign"] = campaign
+            parent_target = campaign.target or self.target
+        else:
+            parent_target = self.target
+        tgtcls = ALL_TARGETS[m["target"]] if "target" in m else type(parent_target)
+        if tgtcls == type(parent_target):
+            args["target"] = parent_target.derive(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
+            )
+        else:
+            args["target"] = tgtcls(
+                **(m[tgtcls.config_key()] if tgtcls.config_key() in m else {})
+            )
         if "crop" in m:
             args["crop"] = m["crop"]
         self.maps.append(MapConfig(**args))
@@ -108,9 +271,12 @@ class Config:
         for m in self.maps:
             if m.name == name:
                 return m
-        raise (ValueError(name))
+        raise (KeyError(name))
+
+    def campaign(self, name: str) -> CampaignConfig:
+        return self.campaigns[name]
 
 
-def load_config(path=default_file()):
+def load_config(path=default_file()) -> Config:
     with open(path, "rb") as f:
         return Config.from_config(tomli.load(f))

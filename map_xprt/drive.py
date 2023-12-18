@@ -10,7 +10,7 @@ import requests
 
 # Main Google client library
 from googleapiclient.discovery import build as google_service_build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import HttpError, MediaIoBaseDownload
 
 # For OAuth2
 SCOPES: Optional[Sequence[str]] = None
@@ -107,6 +107,13 @@ class GoogleDrive:
             .execute()
         )
 
+    @staticmethod
+    def _do_download(file: IO[bytes], request):
+        done = False
+        download = MediaIoBaseDownload(file, request)
+        while done is False:
+            _, done = download.next_chunk()
+
     def export(
         self, mediaType: MediaType, file: Optional[IO[bytes]] = None
     ) -> IO[bytes]:
@@ -118,8 +125,21 @@ class GoogleDrive:
             file = tempfile.NamedTemporaryFile(suffix=mediaType.extension)
         assert file is not None
 
-        done = False
-        download = MediaIoBaseDownload(file, request)
-        while done is False:
-            _, done = download.next_chunk()
+        try:
+            self._do_download(file, request)
+        except HttpError as err:
+            if err.reason not in (
+                "exportSizeLimitExceeded",
+                "This file is too large to be exported.",
+            ):
+                raise
+
+            # Too big for normal export, find the export link and try that instead
+            request.uri = (
+                drive.files()
+                .get(fileId=self.fileId, fields="exportLinks")
+                .execute()["exportLinks"][mediaType.mimeType]
+            )
+            self._do_download(file, request)
+
         return file
